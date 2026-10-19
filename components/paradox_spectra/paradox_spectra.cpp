@@ -59,7 +59,7 @@ void ParadoxSpectra::handle_frame_(const uint8_t *f) {
   const uint8_t partition = f[9] + 1;
 
   // timestamp: bytes[1..6] = century, year, month, day, hour, minute.
-  char ts[20];
+  char ts[32];
   snprintf(ts, sizeof(ts), "%04u-%02u-%02u %02u:%02u",
            (unsigned) (f[1] * 100 + f[2]), f[3], f[4], f[5], f[6]);
 
@@ -176,7 +176,6 @@ void ParadoxSpectra::dump_config() {
   ESP_LOGCONFIG(TAG, "  debug_frames: %s", YESNO(this->debug_frames_));
   ESP_LOGCONFIG(TAG, "  bound zones: open=%u fire=%u", (unsigned) this->open_.size(),
                 (unsigned) this->fire_.size());
-  this->check_uart_settings(9600);
 }
 
 }  // namespace paradox_spectra

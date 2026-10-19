@@ -57,6 +57,12 @@ CONFIG_SCHEMA = (
     .extend(uart.UART_DEVICE_SCHEMA)
 )
 
+# Validate the UART at config time (replaces the deprecated C++ check_uart_settings):
+# 9600 baud, RX required, TX not needed (passive, read-only tap).
+FINAL_VALIDATE_SCHEMA = uart.final_validate_device_schema(
+    "paradox_spectra", baud_rate=9600, require_rx=True, require_tx=False
+)
+
 
 async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])

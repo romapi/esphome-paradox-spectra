@@ -37,6 +37,8 @@ CONF_ZONE = "zone"
 CONF_TYPE = "type"
 # Active poll (optional): login + RAM read for current state + voltages. Needs UART TX
 # wired. Read-only by capability — no control opcodes exist in the component.
+CONF_PARTITIONS = "partitions"
+CONF_PARTITION = "partition"
 CONF_PC_PASSWORD = "pc_password"
 CONF_POLL_INTERVAL = "poll_interval"
 CONF_SUPPLY_VOLTAGE = "supply_voltage"      # VDC rail (~16.7 V)
@@ -75,6 +77,13 @@ CONFIG_SCHEMA = (
             # Optional text_sensor publishing the last decoded event (zone discovery).
             cv.Optional(CONF_LAST_EVENT): text_sensor.text_sensor_schema(),
             cv.Optional(CONF_ZONES, default=[]): cv.ensure_list(ZONE_SCHEMA),
+            # Partition arm-state text sensors (active poll only): each publishes
+            # disarmed / armed_away / armed_home / armed_night / arming / pending / triggered.
+            cv.Optional(CONF_PARTITIONS, default=[]): cv.ensure_list(
+                text_sensor.text_sensor_schema().extend(
+                    {cv.Required(CONF_PARTITION): cv.int_range(min=1, max=2)}
+                )
+            ),
             # --- Active poll (optional). Omit poll_interval (or set 0s) = passive. ---
             cv.Optional(CONF_PC_PASSWORD, default="0000"): cv.string,
             cv.Optional(CONF_POLL_INTERVAL, default="0s"): cv.positive_time_period_milliseconds,
@@ -127,3 +136,7 @@ async def to_code(config):
             cg.add(var.register_zone_tamper(z[CONF_ZONE], bs))
         else:
             cg.add(var.register_zone_open(z[CONF_ZONE], bs))
+
+    for p in config[CONF_PARTITIONS]:
+        ts = await text_sensor.new_text_sensor(p)
+        cg.add(var.register_partition(p[CONF_PARTITION], ts))

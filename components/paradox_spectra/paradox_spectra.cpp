@@ -135,6 +135,10 @@ void ParadoxSpectra::handle_frame_(const uint8_t *f) {
       it->second->publish_state(tampered);
     else
       this->log_unknown_(minor, label, "tamper", tampered ? "TAMPER" : "restore");
+  } else if ((major == 29 || major == 31) && this->poll_interval_ > 0 && this->logged_in_) {
+    // arm/disarm by user -> refresh partition status on the next loop (block 1 first).
+    this->poll_block_ = 1;
+    this->last_poll_ = 0;
   }
 
   const char *name = ParadoxSpectra::event_name_(major);
@@ -244,11 +248,29 @@ void ParadoxSpectra::handle_status_(const uint8_t *d, uint8_t block) {
     }
     ESP_LOGD(TAG, "RAM0: vdc=%.1f batt=%.1f dc=%.1f rf=%u", vdc, battery, dc, d[14]);
   } else if (block == 1) {
-    // partition_status at d[13..20], 4 bytes/partition. Armed = stay|sleep|arm bits in byte0.
-    const bool p1_armed = (d[13] & 0x07) != 0;
-    const bool p2_armed = (d[17] & 0x07) != 0;
-    ESP_LOGD(TAG, "RAM1: partition1 armed=%d partition2 armed=%d", p1_armed, p2_armed);
-    // (Partition arm entities can be wired here if desired.)
+    // partition_status at d[13..], 4 bytes/partition (PartitionStatusAdapter).
+    for (auto &kv : this->partitions_) {
+      const uint8_t pnum = kv.first;          // 1 or 2
+      const uint8_t *pb = d + 13 + (pnum - 1) * 4;
+      const bool alarm = (pb[0] & 0xF0) != 0 || (pb[2] & 0x80) != 0;
+      const char *st;
+      if (alarm)
+        st = "triggered";
+      else if (pb[1] & 0x01)
+        st = "arming";                        // exit_delay
+      else if (pb[1] & 0x02)
+        st = "pending";                       // entry_delay
+      else if (pb[0] & 0x04)
+        st = "armed_home";                    // stay
+      else if (pb[0] & 0x02)
+        st = "armed_night";                   // sleep
+      else if (pb[0] & 0x01)
+        st = "armed_away";                    // full
+      else
+        st = "disarmed";
+      kv.second->publish_state(st);
+      ESP_LOGD(TAG, "RAM1: partition %u = %s", pnum, st);
+    }
   }
 }
 

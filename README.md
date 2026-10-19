@@ -122,6 +122,9 @@ paradox_spectra:
   battery_voltage: { name: "Panel Battery" }
   dc_voltage:      { name: "Panel DC" }
   rf_noise:        { name: "RF Noise" }
+  partitions:              # arm-state text per area (active poll)
+    - { partition: 1, name: "Area 1" }
+    - { partition: 2, name: "Area 2" }
   zones: [...]
 ```
 

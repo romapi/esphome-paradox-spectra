@@ -159,6 +159,14 @@ void ParadoxSpectra::handle_frame_(const uint8_t *f) {
   }
 
   const char *name = ParadoxSpectra::event_name_(major);
+
+  // Bus-device discovery: module_serial (bytes 10..13) identifies the reporting device
+  // (panel, keypad, zone expander, …). Log each distinct non-zero serial once.
+  const uint32_t serial = ((uint32_t) f[10] << 24) | ((uint32_t) f[11] << 16) |
+                          ((uint32_t) f[12] << 8) | f[13];
+  if (serial != 0 && this->seen_devices_.insert(serial).second)
+    ESP_LOGW(TAG, "DISCOVERED bus device serial=%08X (via %s '%s')", serial, name, label);
+
   const bool alert = (major == 36 || major == 37 || major == 38 || major == 39 ||
                       major == 40 || major == 42 || major == 44);
   if (alert)

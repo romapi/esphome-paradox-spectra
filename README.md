@@ -50,6 +50,11 @@ So: flash with an empty (or partial) `zones:` list, walk your PIRs / open doors,
 the device log, and paste the lines it prints. `debug_frames: true` additionally dumps
 every validated frame as hex.
 
+Bus devices (keypads, zone expanders, …) are discovered too: each distinct reporting
+`module_serial` is logged once, e.g.
+`DISCOVERED bus device serial=0012ABCD (via ARM (user) 'JOHN')` — press keys on a
+keypad to make it report.
+
 > Frame layout was derived from the open-source
 > [Paradox Alarm Interface](https://github.com/ParadoxAlarmInterface/pai)
 > (`spectra_magellan`). This component contains original code; PAI's own license

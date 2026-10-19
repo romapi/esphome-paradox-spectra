@@ -61,6 +61,7 @@ class ParadoxSpectra : public Component, public uart::UARTDevice {
   std::map<uint8_t, binary_sensor::BinarySensor *> fire_;
   std::map<uint8_t, binary_sensor::BinarySensor *> tamper_;
   std::set<uint8_t> seen_unknown_;
+  std::set<uint32_t> seen_devices_;   // distinct module_serial seen (keypads/expanders)
   text_sensor::TextSensor *last_event_{nullptr};
   std::map<uint8_t, text_sensor::TextSensor *> partitions_;  // area -> arm-state text
   sensor::Sensor *supply_voltage_{nullptr};   // VDC (~16.7 V)

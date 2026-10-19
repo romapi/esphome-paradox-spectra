@@ -49,6 +49,8 @@ class ParadoxSpectra : public Component, public uart::UARTDevice {
 
   // Active poll (only present when poll_interval_ > 0).
   void send_frame_(uint8_t *f);            // fills byte[36]=checksum, writes 37 bytes
+  void send_initiate_();                   // InitiateCommunication (0x72) — step 1
+  void send_start_();                      // StartCommunication (0x5F) — step 2
   void send_login_();                      // InitializeCommunication (0x00) + pc_password
   void send_read_status_(uint8_t block);   // ReadEEPROM (0x50) @ 0x8000+block
   void handle_status_(const uint8_t *data, uint8_t block);  // RAM block -> entities
@@ -70,16 +72,16 @@ class ParadoxSpectra : public Component, public uart::UARTDevice {
   bool log_all_events_{false};
 
   // Active-poll state
+  enum ConnState : uint8_t { CS_IDLE = 0, CS_INITIATE, CS_START, CS_LOGIN, CS_ONLINE };
   std::string pc_password_{"0000"};
   uint32_t poll_interval_{0};               // 0 = passive only
-  bool have_settings_{false};               // captured product_id/fw/panel_id from panel 0x00
-  bool logged_in_{false};
+  uint8_t conn_state_{CS_IDLE};
   uint8_t product_id_{0};
   uint8_t fw_[3]{0, 0, 0};
   uint16_t panel_id_{0};
-  uint8_t poll_block_{0};                   // cycles 0,1 (then back)
+  uint8_t poll_block_{0};                   // cycles 0,1
   uint32_t last_poll_{0};
-  uint32_t last_login_try_{0};
+  uint32_t last_step_{0};                   // handshake step timer
 };
 
 }  // namespace paradox_spectra

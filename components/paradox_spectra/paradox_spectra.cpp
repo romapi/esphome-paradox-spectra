@@ -39,17 +39,21 @@ void ParadoxSpectra::loop() {
     }
   }
 
-  // Active poll (only if enabled). Login once settings are known, then poll RAM.
+  // Active mode: drive the connect handshake, then poll RAM.
   if (this->poll_interval_ == 0)
     return;
   const uint32_t now = millis();
-  if (!this->logged_in_) {
-    if (this->have_settings_ && now - this->last_login_try_ > 2000) {
-      this->last_login_try_ = now;
-      this->send_login_();
+
+  if (this->conn_state_ != CS_ONLINE) {
+    // (Re)start or retry the handshake if idle or a step stalled (>2s no progress).
+    if (this->conn_state_ == CS_IDLE || now - this->last_step_ > 2000) {
+      this->conn_state_ = CS_INITIATE;
+      this->last_step_ = now;
+      this->send_initiate_();
     }
     return;
   }
+
   if (now - this->last_poll_ >= this->poll_interval_) {
     this->last_poll_ = now;
     this->send_read_status_(this->poll_block_);
@@ -63,34 +67,47 @@ void ParadoxSpectra::handle_frame_(const uint8_t *f) {
   if (this->debug_frames_)
     ESP_LOGD(TAG, "frame cmd=0x%X: %s", cmd, format_hex_pretty(f, FRAME_LEN).c_str());
 
-  // --- Session / status frames (active poll) ---
-  if (f[0] == 0x00) {  // panel greeting: InitializeCommunication from the panel
-    this->product_id_ = f[4];
-    this->fw_[0] = f[5];
-    this->fw_[1] = f[6];
-    this->fw_[2] = f[7];
-    this->panel_id_ = (uint16_t) (f[8] << 8) | f[9];
-    this->have_settings_ = true;
-    ESP_LOGI(TAG, "Panel greeting: product_id=0x%02X fw=%u.%u.%u panel_id=0x%04X",
-             this->product_id_, this->fw_[0], this->fw_[1], this->fw_[2], this->panel_id_);
-    if (this->poll_interval_ > 0 && !this->logged_in_)
+  // --- Session handshake / status frames (active mode) ---
+  if (this->poll_interval_ > 0) {
+    // InitiateCommunicationResponse: cmd nibble 7, byte1 == 0xFF (distinguishes it from
+    // ErrorMessage/CloseConnection, which also use nibble 7).
+    if (this->conn_state_ == CS_INITIATE && cmd == 0x7 && f[1] == 0xFF) {
+      ESP_LOGI(TAG, "Panel replied to InitiateCommunication -> StartCommunication");
+      this->conn_state_ = CS_START;
+      this->last_step_ = millis();
+      this->send_start_();
+      return;
+    }
+    // StartCommunicationResponse: cmd nibble 0, carries product_id/fw/panel_id.
+    if (this->conn_state_ == CS_START && cmd == 0x0) {
+      this->product_id_ = f[4];
+      this->fw_[0] = f[5];
+      this->fw_[1] = f[6];
+      this->fw_[2] = f[7];
+      this->panel_id_ = (uint16_t) ((f[8] << 8) | f[9]);
+      ESP_LOGI(TAG, "Panel detected: product_id=0x%02X fw=%u.%u.%u panel_id=0x%04X",
+               this->product_id_, this->fw_[0], this->fw_[1], this->fw_[2], this->panel_id_);
+      this->conn_state_ = CS_LOGIN;
+      this->last_step_ = millis();
       this->send_login_();
-    return;
-  }
-  if (cmd == 0x1) {  // 0x10 InitializeCommunicationResponse -> login OK
-    this->logged_in_ = true;
-    this->last_poll_ = 0;  // poll immediately
-    ESP_LOGI(TAG, "Login OK (authenticated)");
-    return;
-  }
-  if (cmd == 0x7) {  // 0x7x error / 0x70 close
-    this->logged_in_ = false;
-    ESP_LOGW(TAG, "Login failed / connection closed (0x%02X) — wrong PC password?", f[0]);
-    return;
-  }
-  if (cmd == 0x5 && f[2] == 0x80) {  // ReadStatusResponse: validation 0x80, block in f[3]
-    this->handle_status_(f + 4, f[3]);  // 32-byte RAM payload
-    return;
+      return;
+    }
+    if (this->conn_state_ == CS_LOGIN && cmd == 0x1) {  // 0x10 login OK
+      ESP_LOGI(TAG, "Login OK (authenticated)");
+      this->conn_state_ = CS_ONLINE;
+      this->last_poll_ = 0;  // poll immediately
+      return;
+    }
+    // Error / CloseConnection during handshake -> reset and retry.
+    if (cmd == 0x7 && f[1] != 0xFF && this->conn_state_ != CS_ONLINE) {
+      ESP_LOGW(TAG, "Handshake rejected (0x%02X) — wrong PC password? restarting", f[0]);
+      this->conn_state_ = CS_IDLE;
+      return;
+    }
+    if (cmd == 0x5 && f[2] == 0x80) {  // ReadStatusResponse: validation 0x80, block in f[3]
+      this->handle_status_(f + 4, f[3]);
+      return;
+    }
   }
   if (cmd != 0xE)
     return;  // other command responses: ignore
@@ -135,7 +152,7 @@ void ParadoxSpectra::handle_frame_(const uint8_t *f) {
       it->second->publish_state(tampered);
     else
       this->log_unknown_(minor, label, "tamper", tampered ? "TAMPER" : "restore");
-  } else if ((major == 29 || major == 31) && this->poll_interval_ > 0 && this->logged_in_) {
+  } else if ((major == 29 || major == 31) && this->conn_state_ == CS_ONLINE) {
     // arm/disarm by user -> refresh partition status on the next loop (block 1 first).
     this->poll_block_ = 1;
     this->last_poll_ = 0;
@@ -166,6 +183,23 @@ void ParadoxSpectra::send_frame_(uint8_t *f) {
     sum += f[i];
   f[FRAME_LEN - 1] = static_cast<uint8_t>(sum & 0xFF);
   this->write_array(f, FRAME_LEN);
+}
+
+void ParadoxSpectra::send_initiate_() {
+  // InitiateCommunication: byte0 = command nibble 7 + reserved nibble 2 = 0x72.
+  uint8_t f[FRAME_LEN] = {0};
+  f[0] = 0x72;
+  ESP_LOGI(TAG, "InitiateCommunication");
+  this->send_frame_(f);
+}
+
+void ParadoxSpectra::send_start_() {
+  // StartCommunication: command 0x5F, validation 0x20, source_id (byte33) = 0x02.
+  uint8_t f[FRAME_LEN] = {0};
+  f[0] = 0x5F;
+  f[1] = 0x20;
+  f[33] = 0x02;
+  this->send_frame_(f);
 }
 
 void ParadoxSpectra::send_login_() {

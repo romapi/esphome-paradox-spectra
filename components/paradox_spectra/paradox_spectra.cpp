@@ -313,7 +313,7 @@ void ParadoxSpectra::dump_config() {
   ESP_LOGCONFIG(TAG, "Paradox Spectra decoder");
   ESP_LOGCONFIG(TAG, "  mode: %s", this->poll_interval_ > 0 ? "active (login + RAM poll)" : "passive (events only)");
   if (this->poll_interval_ > 0)
-    ESP_LOGCONFIG(TAG, "  poll_interval: %u ms", this->poll_interval_);
+    ESP_LOGCONFIG(TAG, "  poll_interval: %u ms", (unsigned) this->poll_interval_);
   ESP_LOGCONFIG(TAG, "  debug_frames: %s | log_all_events: %s", YESNO(this->debug_frames_),
                 YESNO(this->log_all_events_));
   ESP_LOGCONFIG(TAG, "  bound zones: open=%u fire=%u tamper=%u", (unsigned) this->open_.size(),

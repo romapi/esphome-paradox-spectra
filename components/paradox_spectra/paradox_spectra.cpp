@@ -128,6 +128,13 @@ void ParadoxSpectra::handle_frame_(const uint8_t *f) {
       it->second->publish_state(fire);
     else
       this->log_unknown_(minor, label, "fire", fire ? "ALARM" : "restore");
+  } else if (major == 42 || major == 43) {
+    const bool tampered = (major == 42);
+    auto it = this->tamper_.find(minor);
+    if (it != this->tamper_.end())
+      it->second->publish_state(tampered);
+    else
+      this->log_unknown_(minor, label, "tamper", tampered ? "TAMPER" : "restore");
   }
 
   const char *name = ParadoxSpectra::event_name_(major);
@@ -223,8 +230,13 @@ void ParadoxSpectra::handle_status_(const uint8_t *d, uint8_t block) {
     if (this->battery_voltage_ != nullptr) this->battery_voltage_->publish_state(battery);
     if (this->dc_voltage_ != nullptr) this->dc_voltage_->publish_state(dc);
     if (this->rf_noise_ != nullptr) this->rf_noise_->publish_state(d[14]);
-    this->publish_zone_bitmap_(d + 15);  // authoritative current open/closed
-    // zone_fire bitmap (d+27): set fire sensors from current state.
+    this->publish_zone_bitmap_(d + 15);  // zone_open: authoritative current open/closed
+    // zone_tamper bitmap (d+19) and zone_fire bitmap (d+27): current state per zone.
+    for (auto &kv : this->tamper_) {
+      const uint8_t z = kv.first;
+      if ((z - 1) / 8 < 4)
+        kv.second->publish_state((d[19 + (z - 1) / 8] >> ((z - 1) % 8)) & 0x01);
+    }
     for (auto &kv : this->fire_) {
       const uint8_t z = kv.first;
       if ((z - 1) / 8 < 4)
@@ -304,8 +316,8 @@ void ParadoxSpectra::dump_config() {
     ESP_LOGCONFIG(TAG, "  poll_interval: %u ms", this->poll_interval_);
   ESP_LOGCONFIG(TAG, "  debug_frames: %s | log_all_events: %s", YESNO(this->debug_frames_),
                 YESNO(this->log_all_events_));
-  ESP_LOGCONFIG(TAG, "  bound zones: open=%u fire=%u", (unsigned) this->open_.size(),
-                (unsigned) this->fire_.size());
+  ESP_LOGCONFIG(TAG, "  bound zones: open=%u fire=%u tamper=%u", (unsigned) this->open_.size(),
+                (unsigned) this->fire_.size(), (unsigned) this->tamper_.size());
 }
 
 }  // namespace paradox_spectra

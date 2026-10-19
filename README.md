@@ -90,8 +90,11 @@ paradox_spectra:
 ```
 
 Each `zones:` entry is a full `binary_sensor` (so `id`, `filters`, `device_class`,
-etc. all work) plus `zone:` (panel zone number) and `type:` (`open` = PIR/contact,
-event major 0/1 — the default; `fire` = smoke/fire, event major 37/39).
+etc. all work) plus `zone:` (panel zone number) and `type:`:
+- `open` (default) — PIR/contact, event major 0/1, or `zone_open` bitmap when polling.
+- `fire` — smoke/fire, event major 37/39, or `zone_fire` bitmap.
+- `tamper` — zone tamper, event major 42/43, or `zone_tamper` bitmap (use
+  `device_class: tamper`).
 
 ## Passive vs active
 

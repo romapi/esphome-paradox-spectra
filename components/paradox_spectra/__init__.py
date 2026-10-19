@@ -58,7 +58,9 @@ def _voltage_sensor():
 ZONE_SCHEMA = binary_sensor.binary_sensor_schema().extend(
     {
         cv.Required(CONF_ZONE): cv.int_range(min=1, max=32),
-        cv.Optional(CONF_TYPE, default="open"): cv.one_of("open", "fire", lower=True),
+        cv.Optional(CONF_TYPE, default="open"): cv.one_of(
+            "open", "fire", "tamper", lower=True
+        ),
     }
 )
 
@@ -121,5 +123,7 @@ async def to_code(config):
         bs = await binary_sensor.new_binary_sensor(z)
         if z[CONF_TYPE] == "fire":
             cg.add(var.register_zone_fire(z[CONF_ZONE], bs))
+        elif z[CONF_TYPE] == "tamper":
+            cg.add(var.register_zone_tamper(z[CONF_ZONE], bs))
         else:
             cg.add(var.register_zone_open(z[CONF_ZONE], bs))

@@ -33,6 +33,7 @@ class ParadoxSpectra : public Component, public uart::UARTDevice {
 
   void register_zone_open(uint8_t zone, binary_sensor::BinarySensor *s) { this->open_[zone] = s; }
   void register_zone_fire(uint8_t zone, binary_sensor::BinarySensor *s) { this->fire_[zone] = s; }
+  void register_zone_tamper(uint8_t zone, binary_sensor::BinarySensor *s) { this->tamper_[zone] = s; }
   void set_last_event(text_sensor::TextSensor *s) { this->last_event_ = s; }
   void set_supply_voltage(sensor::Sensor *s) { this->supply_voltage_ = s; }
   void set_battery_voltage(sensor::Sensor *s) { this->battery_voltage_ = s; }
@@ -55,6 +56,7 @@ class ParadoxSpectra : public Component, public uart::UARTDevice {
   std::vector<uint8_t> buf_;
   std::map<uint8_t, binary_sensor::BinarySensor *> open_;
   std::map<uint8_t, binary_sensor::BinarySensor *> fire_;
+  std::map<uint8_t, binary_sensor::BinarySensor *> tamper_;
   std::set<uint8_t> seen_unknown_;
   text_sensor::TextSensor *last_event_{nullptr};
   sensor::Sensor *supply_voltage_{nullptr};   // VDC (~16.7 V)

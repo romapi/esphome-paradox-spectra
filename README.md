@@ -93,6 +93,39 @@ Each `zones:` entry is a full `binary_sensor` (so `id`, `filters`, `device_class
 etc. all work) plus `zone:` (panel zone number) and `type:` (`open` = PIR/contact,
 event major 0/1 — the default; `fire` = smoke/fire, event major 37/39).
 
+## Passive vs active
+
+By default the component is **passive** (RX only): zones update only when the panel
+emits a change event — no current-state snapshot, no voltages. Great for presence +
+smoke, and it never transmits.
+
+Set `poll_interval` (and wire **UART TX**) to go **active**: the component logs in with
+`pc_password` and reads panel RAM, giving authoritative current zone state on every
+poll plus supply voltages and partition arm state. Active mode makes the ESP the **sole
+bus master** — stop any other client (e.g. PAI) first.
+
+```yaml
+uart:
+  id: uart_paradox
+  tx_pin: GPIO2        # REQUIRED for active poll
+  rx_pin: GPIO1
+  baud_rate: 9600
+
+paradox_spectra:
+  uart_id: uart_paradox
+  pc_password: "0000"  # panel PC password (section programming)
+  poll_interval: 3s    # 0s / omitted = passive
+  supply_voltage:  { name: "Panel VDC" }
+  battery_voltage: { name: "Panel Battery" }
+  dc_voltage:      { name: "Panel DC" }
+  rf_noise:        { name: "RF Noise" }
+  zones: [...]
+```
+
+> **Read-only by capability:** even in active mode the component sends **only** login +
+> RAM-read requests — there are no arm/disarm/PGM opcodes anywhere in the code, so it
+> cannot actuate the panel.
+
 See [`example.yaml`](example.yaml) for a fuller config.
 
 ## ⚠ Safety
